@@ -59,27 +59,54 @@ extern "C" {
 #define ARP_REPLY 		SWAP_U16(2)
 #define IP_ADDR 		{192,168,1,197}
 
-#define GREEN
+#define IP_ICMP 	1
+#define IP_TCP 		6
+#define IP_UDP 		17
+
+#define ICMP_ECHO_REQ 		8
+#define ICMP_ECHO_REPLY 	0
 
 typedef struct eth_frame_s{
-  uint8_t addr_dest[6];
-  uint8_t addr_src[6];
-  uint16_t type;
-  uint8_t data[];
+  uint8_t 	addr_dest[6];
+  uint8_t	addr_src[6];
+  uint16_t 	type;
+  uint8_t 	data[];
 } eth_frame_ptr_t;
 
 typedef struct arp_msg_s{
-  uint16_t net_tp;
-  uint16_t proto_tp;
-  uint8_t macaddr_len;
-  uint8_t ipaddr_len;
-  uint16_t op;
-  uint8_t macaddr_src[6];
-  uint8_t ipaddr_src[4];
-  uint8_t macaddr_dst[6];
-  uint8_t ipaddr_dst[4];
+  uint16_t 	net_tp;
+  uint16_t 	proto_tp;
+  uint8_t	macaddr_len;
+  uint8_t 	ipaddr_len;
+  uint16_t	op;
+  uint8_t	macaddr_src[6];
+  uint8_t	ipaddr_src[4];
+  uint8_t	macaddr_dst[6];
+  uint8_t	ipaddr_dst[4];
 } arp_msg_ptr_t;
 
+typedef struct ip_pkt_s{
+	uint8_t 	verlen;			//версия протокола и длина заголовка
+	uint8_t 	ts;				//тип севриса
+	uint16_t 	len;			//длина
+	uint16_t 	id;				//идентификатор пакета
+	uint16_t 	fl_frg_of;		//флаги и смещение фрагмента
+	uint8_t 	ttl;			//время жизни
+	uint8_t 	prt;			//тип протокола
+	uint16_t 	cs;				//контрольная сумма заголовка
+	uint8_t 	ipaddr_src[4];	//IP-адрес отправителя
+	uint8_t 	ipaddr_dst[4];	//IP-адрес получателя
+	uint8_t 	data[];			//данные
+} ip_pkt_ptr_t;
+
+typedef struct icmp_pkt_s{
+	uint8_t 	msg_tp;	//тип севриса
+	uint8_t 	msg_cd;	//код сообщения
+	uint16_t 	cs;		//контрольная сумма заголовка
+	uint16_t 	id;		//идентификатор пакета
+	uint16_t 	num;	//номер пакета
+	uint8_t 	data[];	//данные
+} icmp_pkt_ptr_t;
 
 void net_init (void);
 void net_pool(void);

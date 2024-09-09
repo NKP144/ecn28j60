@@ -21,6 +21,25 @@ void net_init (void)
 	enc28j60_init();
 }
 
+uint16_t checksum(uint8_t *ptr, uint16_t len)
+{
+	uint32_t sum = 0;
+	while(len > 1)
+	{
+		sum += (uint16_t)(((uint32_t)*ptr<<8)|*(ptr+1));
+		ptr += 2;
+		len -= 2;
+	}
+
+	if (len)
+		sum += ((uint32_t)*ptr) << 8;
+
+	while (sum>>16)
+		sum = (uint16_t)sum + (sum>>16);
+
+	return ~SWAP_U16((uint16_t)sum);
+}
+
 uint8_t arp_read(eth_frame_ptr_t *frame, uint16_t len)
 {
 	uint8_t res=0;
@@ -94,6 +113,89 @@ int arp_send(eth_frame_ptr_t *frame)
 	return result;
 }
 
+int ip_send(eth_frame_ptr_t *frame, uint16_t len)
+{
+	int result = 0;
+	ip_pkt_ptr_t *ip_pkt_ptr = (void*)frame->data;
+
+	//Заполним заголовок пакета IP
+	ip_pkt_ptr->len = SWAP_U16(len);
+	ip_pkt_ptr->fl_frg_of = 0;
+	ip_pkt_ptr->ttl = 128;
+	ip_pkt_ptr->cs = 0;
+	memcpy(ip_pkt_ptr->ipaddr_dst, ip_pkt_ptr->ipaddr_src, 4);
+	memcpy(ip_pkt_ptr->ipaddr_src, ipaddr, 4);
+	ip_pkt_ptr->cs = checksum((void*)ip_pkt_ptr, sizeof(ip_pkt_ptr_t));
+
+	//отправим фрейм
+	result = eth_send(frame, len);
+
+	return result;
+}
+
+int icmp_read(eth_frame_ptr_t *frame, uint16_t len)
+{
+	int result = 0;
+
+	ip_pkt_ptr_t *ip_pkt_ptr = (void*)frame->data;
+	icmp_pkt_ptr_t *icmp_pkt_ptr = (void*)ip_pkt_ptr->data;
+
+	//Отфильтруем пакет по длине и типу сообщения - эхо-запрос
+	if ((len >= sizeof(icmp_pkt_ptr_t)) && (icmp_pkt_ptr->msg_tp == ICMP_ECHO_REQ))
+	{
+		printf(COLOR_MAGENTA_I);
+		printf("\ticmp echo request\r\n");
+		printf(COLOR_RESET);
+
+		printf(COLOR_CYAN);
+		printf("\ticmp echo reply\r\n");
+		printf(COLOR_RESET);
+
+		icmp_pkt_ptr->msg_tp = ICMP_ECHO_REPLY;
+		icmp_pkt_ptr->cs = 0;
+		icmp_pkt_ptr->cs = checksum((void*)icmp_pkt_ptr, len);
+		ip_send(frame, len + sizeof(ip_pkt_ptr_t));
+	}
+
+	return result;
+}
+
+
+
+uint8_t ip_read (eth_frame_ptr_t *frame, uint16_t len)
+{
+	uint8_t res = 0;
+	ip_pkt_ptr_t *ip_pkt_ptr = (void*)(frame->data);
+
+	if((ip_pkt_ptr->verlen == 0x45)&&(!memcmp(ip_pkt_ptr->ipaddr_dst, ipaddr, 4)))
+	{
+		printf(COLOR_GREEN);
+		printf("\tIP confirm\r\n");
+		printf(COLOR_RESET);
+        //
+		//len = SWAP_U16(ip_pkt_ptr->len) - sizeof(ip_pkt_ptr_t);
+		//printf("\r\nip_cs 0x%04X\r\n", ip_pkt_ptr->cs);
+		//ip_pkt_ptr->cs=0;
+		//printf("ip_cs 0x%04X\r\n", checksum((void*)ip_pkt_ptr, sizeof(ip_pkt_ptr_t)));
+		len = SWAP_U16(ip_pkt_ptr->len) - sizeof(ip_pkt_ptr_t);
+
+		if (ip_pkt_ptr->prt==IP_ICMP)
+		{
+			icmp_read(frame, len);
+		}
+		else if (ip_pkt_ptr->prt==IP_TCP)
+		{
+
+		}
+		else if (ip_pkt_ptr->prt==IP_UDP)
+		{
+
+		}
+
+	}
+
+	return res;
+}
 
 void eth_read (eth_frame_ptr_t *frame, uint16_t len)
 {
@@ -124,6 +226,10 @@ void eth_read (eth_frame_ptr_t *frame, uint16_t len)
 			arp_send(frame);
 		}
 	  }
+	  else if (frame->type == ETH_IP)
+	  {
+		  ip_read(frame, len-sizeof(ip_pkt_ptr_t));
+	  }
 	}
 }
 
@@ -132,6 +238,7 @@ void eth_read (eth_frame_ptr_t *frame, uint16_t len)
 void net_pool(void)
 {
 	int result = 0;
+
 	uint32_t len = 0;
 	eth_frame_ptr_t *frame = (void*)net_buf;
 
